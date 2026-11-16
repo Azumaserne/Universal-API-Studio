@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.UniversalApiStudio" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF080A12</item>
+        <item name="android:statusBarColor">#FF080A12</item>
+        <item name="android:navigationBarColor">#FF080A12</item>
+    </style>
+</resources>
