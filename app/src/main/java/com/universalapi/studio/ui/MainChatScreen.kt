@@ -757,11 +757,11 @@ fun MainChatScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("版本: v1.0.0 (Open Source Edition)", style = MaterialTheme.typography.bodySmall)
                     Text("包名: com.universalapi.studio.oss", style = MaterialTheme.typography.bodySmall)
-                    Text("开源协议: MIT License", style = MaterialTheme.typography.bodySmall)
+                    Text("许可协议: Non-Commercial (严禁商业销售/倒卖)", style = MaterialTheme.typography.bodySmall, color = Brand.Warning)
                     Text("软件作者: @Azumaserne", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "免激活开箱即用。所有 API Key 与对话历史仅保存在本地设备中，零广告、零后台遥测。",
+                        "仅供个人免费学习与非商业使用，未经作者授权严禁倒卖或商业售卖。所有 API Key 与对话历史仅保存在本地，零广告零遥测。",
                         style = MaterialTheme.typography.bodySmall,
                         color = Brand.Success,
                     )
@@ -774,7 +774,7 @@ fun MainChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    copyText("https://github.com/Azumaserne/Universal-API-Studio", "已复制 GitHub 仓库参考地址")
+                    copyText("https://github.com/kaka714/Universal-API-Studio", "已复制 GitHub 仓库地址")
                 }) {
                     Text("复制仓库地址")
                 }

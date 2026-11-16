@@ -7,9 +7,9 @@
 [![Android](https://img.shields.io/badge/Platform-Android%207.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.24-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Non-Commercial](https://img.shields.io/badge/License-Non--Commercial%20(No%20Sale)-red.svg)](LICENSE)
 
-*Designed & Authored by **[@Azumaserne](https://github.com/Azumaserne)***
+*Designed & Authored by **[@Azumaserne](https://github.com/kaka714/Universal-API-Studio)***
 
 </div>
 
@@ -94,8 +94,10 @@ app/build/outputs/apk/release/app-release.apk
 
 ---
 
-## 📄 开源协议
+## 📄 开源协议与版权声明
 
-本项目基于 [MIT License](LICENSE) 开源。
+本项目采用 [**Non-Commercial License（非商业使用许可协议）**](LICENSE) 开源：
+- ✅ **允许**：个人免费使用、学习研究、二次修改及非商业免费分享（需保留 `@Azumaserne` 作者署名）。
+- 🚫 **严禁销售与倒卖**：未经作者 `@Azumaserne` 书面授权，**禁止任何个人或机构将本软件源码、修改版或编译后的 APK 用于商业销售、收费代装、捆绑销售或在闲鱼/淘宝等平台倒卖牟利**。
 
-Copyright © 2026 **[@Azumaserne](https://github.com/Azumaserne)**
+Copyright © 2026 **[@Azumaserne](https://github.com/kaka714/Universal-API-Studio)**
