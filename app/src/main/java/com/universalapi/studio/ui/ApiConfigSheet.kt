@@ -66,6 +66,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.universalapi.studio.data.ApiProfile
 import com.universalapi.studio.data.HeaderPair
+import com.universalapi.studio.data.ModelCatalog
 import com.universalapi.studio.network.UniversalApiClient
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -315,6 +316,33 @@ fun ApiConfigScreen(
                 }
             }
 
+            val familyPresets = remember(current.id, current.baseUrl, current.model) {
+                ModelCatalog.presetsForProfile(current)
+            }
+            if (familyPresets.isNotEmpty()) {
+                Text(
+                    "同家族快捷切换",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(familyPresets, key = { it.id }) { preset ->
+                        FilterChip(
+                            selected = current.model.substringBefore(":").equals(preset.id, ignoreCase = true),
+                            onClick = {
+                                updateCurrent {
+                                    it.copy(model = preset.id, contextWindow = preset.contextWindow)
+                                }
+                            },
+                            label = {
+                                val suffix = if (preset.tag.isNotBlank()) " · ${preset.tag}" else ""
+                                Text("${preset.displayName}$suffix")
+                            },
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -491,6 +519,28 @@ fun ApiConfigScreen(
                         selected = current.contextWindow == tokens,
                         onClick = { updateCurrent { it.copy(contextWindow = tokens) } },
                         label = { Text(label) },
+                    )
+                }
+            }
+
+            Text("思考等级 (Reasoning Effort)", style = MaterialTheme.typography.bodySmall)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(ModelCatalog.reasoningEfforts, key = { it.value }) { opt ->
+                    FilterChip(
+                        selected = current.reasoningEffort == opt.value,
+                        onClick = { updateCurrent { it.copy(reasoningEffort = opt.value) } },
+                        label = { Text(opt.label) },
+                    )
+                }
+            }
+
+            Text("速度 / 服务等级 (Speed / Service Tier)", style = MaterialTheme.typography.bodySmall)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(ModelCatalog.speedModes, key = { it.value }) { opt ->
+                    FilterChip(
+                        selected = current.speedMode == opt.value,
+                        onClick = { updateCurrent { it.copy(speedMode = opt.value) } },
+                        label = { Text(opt.label) },
                     )
                 }
             }

@@ -23,7 +23,8 @@
 
 - **📦 极简轻量**：Release APK 仅约 **1.2MB**，原生渲染零 WebView 卡顿，零广告、零遥测，所有密钥与聊天记录 100% 本地存储。
 - **📊 顶部栏实时上下文 & Cache Hit 监控**：API 模板右侧内置实时状态胶囊，直观展示当前上下文窗口占用（如 `上下文 1.2k/128k (1%)`）与 Prompt Cache 命中率（如 `Cache 78% (960)`），点击即可展开详情并快捷切换 `32K / 64K / 128K / 200K / 1M` 上下文窗口。
-- **🔌 全协议兼容**：原生兼容 OpenAI、DeepSeek、Claude、Gemini、OneAPI / NewAPI 等中转网关，也支持开启「严格原始 URL」接入任意自定义 REST POST 接口。
+- **🔌 全协议兼容 & 开箱即用 OpenRouter 预设**：内置 **OpenRouter · ChatGPT**（`GPT-6.2 Astra / Sol`、`GPT-6.1 Terra`、`GPT-6 Luna`）与 **OpenRouter · Claude**（`Opus / Sonnet / Haiku / Fable`）标准渠道，粘贴一次 OpenRouter Key 即可自动同步共用；同时支持 DeepSeek、OneAPI / NewAPI 中转，或开启「严格原始 URL」对接任意自定义 POST 接口。
+- **🧠 思考等级 (Effort) & 速度模式速切**：输入框上方内置快捷条，单手即可切换同家族模型、调整思考等级（`none / minimal / low / medium / high / xhigh / max`），以及选择速度/路由档位（`Fast`、`Ultrafast`、OpenRouter `:nitro`、低延迟或 `Flex`）。
 - **⚡ SSE 流式与深度思考折叠**：流式实时输出 + `reasoning_content` 思考过程折叠卡片，支持随时中断请求。
 - **🛠️ 硬核高级参数**：多渠道方案管理（JSON 导入导出）、一键拉取 `/models`、自定义 HTTP Headers、独立会话 System Prompt、Temperature / Top P / Max Tokens、附加顶层 JSON (`Extra Body`)、自定义 Body 模板引擎与 JSON 响应提取路径。
 - **🔍 内置 HTTP 报文抓包**：每条回复一键查看完整脱敏请求头、请求体、状态码、耗时（ms）与原始返回报文。

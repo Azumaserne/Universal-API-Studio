@@ -2,6 +2,7 @@ package com.universalapi.studio.network
 
 import com.universalapi.studio.data.ApiProfile
 import com.universalapi.studio.data.ChatMessage
+import com.universalapi.studio.data.ModelCatalog
 import com.universalapi.studio.data.TokenEstimator
 import com.universalapi.studio.data.TokenUsage
 import kotlinx.coroutines.Dispatchers
@@ -62,12 +63,22 @@ object UniversalApiClient {
         return if (quoted.length >= 2) quoted.substring(1, quoted.length - 1) else ""
     }
 
+    fun resolveEffectiveModelId(profile: ApiProfile, allowNitro: Boolean = true): String {
+        val raw = profile.model.trim()
+        if (raw.isEmpty()) return ""
+        return if (allowNitro && ModelCatalog.isOpenRouter(profile) && profile.speedMode == "nitro" && !raw.contains(":")) {
+            "$raw:nitro"
+        } else {
+            raw
+        }
+    }
+
     private fun buildRequestBodyJson(
         profile: ApiProfile,
         history: List<ChatMessage>,
         sessionSystemPrompt: String,
-        includeStreamOptions: Boolean = true,
-    ): Pair<String, Boolean> {
+        excludedFields: Set<String> = emptySet(),
+    ): String {
         val effectiveSystem = sessionSystemPrompt.ifBlank { profile.systemPrompt }.trim()
         val messagesArr = JSONArray()
         if (effectiveSystem.isNotBlank()) {
@@ -84,11 +95,12 @@ object UniversalApiClient {
         }
 
         val latestUserPrompt = history.lastOrNull { it.role == "user" }?.content.orEmpty()
+        val effectiveModel = resolveEffectiveModelId(profile, allowNitro = "nitro" !in excludedFields)
 
         if (profile.customBodyTemplate.isNotBlank()) {
             var rendered = profile.customBodyTemplate
-                .replace("{{model_json}}", JSONObject.quote(profile.model))
-                .replace("{{model}}", jsonEscapeInner(profile.model))
+                .replace("{{model_json}}", JSONObject.quote(effectiveModel))
+                .replace("{{model}}", jsonEscapeInner(effectiveModel))
                 .replace("{{prompt_json}}", JSONObject.quote(latestUserPrompt))
                 .replace("{{prompt}}", jsonEscapeInner(latestUserPrompt))
                 .replace("{{system_prompt_json}}", JSONObject.quote(effectiveSystem))
@@ -109,17 +121,65 @@ object UniversalApiClient {
                 }
                 rendered = baseObj.toString(2)
             }
-            return rendered to false
+            return rendered
         }
 
+        val isOpenRouter = ModelCatalog.isOpenRouter(profile)
         val root = JSONObject().apply {
-            put("model", profile.model)
+            put("model", effectiveModel)
             put("messages", messagesArr)
             put("stream", profile.stream)
-            put("temperature", String.format(java.util.Locale.US, "%.2f", profile.temperature).toDouble())
-            put("top_p", String.format(java.util.Locale.US, "%.2f", profile.topP).toDouble())
+            if ("temperature" !in excludedFields) {
+                put("temperature", String.format(java.util.Locale.US, "%.2f", profile.temperature).toDouble())
+            }
+            if ("top_p" !in excludedFields) {
+                put("top_p", String.format(java.util.Locale.US, "%.2f", profile.topP).toDouble())
+            }
             if (profile.maxTokens != null && profile.maxTokens > 0) {
                 put("max_tokens", profile.maxTokens)
+            }
+        }
+
+        if (!profile.useExactUrl && profile.reasoningEffort.isNotBlank() && "reasoning" !in excludedFields) {
+            if (isOpenRouter) {
+                root.put("reasoning", JSONObject().apply { put("effort", profile.reasoningEffort) })
+            } else if (profile.reasoningEffort != "none") {
+                root.put("reasoning_effort", profile.reasoningEffort)
+            }
+        }
+
+        if (!profile.useExactUrl && profile.speedMode.isNotBlank()) {
+            when (profile.speedMode) {
+                "fast" -> {
+                    if ("service_tier" !in excludedFields) root.put("service_tier", "fast")
+                }
+                "ultrafast" -> {
+                    if ("service_tier" !in excludedFields) root.put("service_tier", "ultrafast")
+                }
+                "nitro" -> {
+                    if (isOpenRouter) {
+                        if ("provider" !in excludedFields) {
+                            root.put("provider", JSONObject().apply { put("sort", "throughput") })
+                        }
+                    } else if ("service_tier" !in excludedFields) {
+                        root.put("service_tier", "fast")
+                    }
+                }
+                "latency" -> {
+                    if (isOpenRouter) {
+                        if ("provider" !in excludedFields) {
+                            root.put("provider", JSONObject().apply { put("sort", "latency") })
+                        }
+                    } else if ("service_tier" !in excludedFields) {
+                        root.put("service_tier", "priority")
+                    }
+                }
+                "flex" -> {
+                    if ("service_tier" !in excludedFields) root.put("service_tier", "flex")
+                    if (isOpenRouter && "provider" !in excludedFields) {
+                        root.put("provider", JSONObject().apply { put("sort", "price") })
+                    }
+                }
             }
         }
 
@@ -133,13 +193,11 @@ object UniversalApiClient {
             }
         }
 
-        var injectedStreamOpts = false
-        if (profile.stream && !profile.useExactUrl && includeStreamOptions && !root.has("stream_options")) {
+        if (profile.stream && !profile.useExactUrl && "stream_options" !in excludedFields && !root.has("stream_options")) {
             root.put("stream_options", JSONObject().apply { put("include_usage", true) })
-            injectedStreamOpts = true
         }
 
-        return root.toString() to injectedStreamOpts
+        return root.toString()
     }
 
     private fun buildHeadersMap(profile: ApiProfile): Map<String, String> {
@@ -378,7 +436,8 @@ object UniversalApiClient {
         profile = profile,
         history = history,
         sessionSystemPrompt = sessionSystemPrompt,
-        includeStreamOptions = true,
+        excludedFields = emptySet(),
+        retriesLeft = 2,
         onStreamUpdate = onStreamUpdate,
         onCallCreated = onCallCreated,
     )
@@ -387,7 +446,8 @@ object UniversalApiClient {
         profile: ApiProfile,
         history: List<ChatMessage>,
         sessionSystemPrompt: String,
-        includeStreamOptions: Boolean,
+        excludedFields: Set<String>,
+        retriesLeft: Int,
         onStreamUpdate: (contentSoFar: String, reasoningSoFar: String, liveUsage: TokenUsage?) -> Unit,
         onCallCreated: (Call) -> Unit,
     ): ApiCallResult = withContext(Dispatchers.IO) {
@@ -404,12 +464,9 @@ object UniversalApiClient {
 
         val startMs = System.currentTimeMillis()
         val bodyString: String
-        val injectedStreamOptions: Boolean
         val headersMap: Map<String, String>
         try {
-            val built = buildRequestBodyJson(profile, history, sessionSystemPrompt, includeStreamOptions)
-            bodyString = built.first
-            injectedStreamOptions = built.second
+            bodyString = buildRequestBodyJson(profile, history, sessionSystemPrompt, excludedFields)
             headersMap = buildHeadersMap(profile)
         } catch (e: Exception) {
             return@withContext ApiCallResult(
@@ -444,19 +501,27 @@ object UniversalApiClient {
 
                 if (!resp.isSuccessful) {
                     val errBody = resp.body?.string().orEmpty()
-                    // 若网关不支持 stream_options 字段，自动去掉后重试一次
-                    if (includeStreamOptions && injectedStreamOptions &&
-                        (resp.code == 400 || resp.code == 422) &&
-                        errBody.contains("stream_options", ignoreCase = true)
-                    ) {
-                        return@withContext sendMessageInternal(
-                            profile = profile,
-                            history = history,
-                            sessionSystemPrompt = sessionSystemPrompt,
-                            includeStreamOptions = false,
-                            onStreamUpdate = onStreamUpdate,
-                            onCallCreated = onCallCreated,
-                        )
+                    if (retriesLeft > 0 && (resp.code == 400 || resp.code == 422)) {
+                        val newlyExcluded = mutableSetOf<String>()
+                        if (errBody.contains("stream_options", ignoreCase = true)) newlyExcluded += "stream_options"
+                        if (errBody.contains("service_tier", ignoreCase = true)) newlyExcluded += "service_tier"
+                        if (errBody.contains("provider", ignoreCase = true)) newlyExcluded += "provider"
+                        if (errBody.contains("reasoning", ignoreCase = true)) newlyExcluded += "reasoning"
+                        if (errBody.contains("temperature", ignoreCase = true)) newlyExcluded += "temperature"
+                        if (errBody.contains("top_p", ignoreCase = true)) newlyExcluded += "top_p"
+                        if (errBody.contains(":nitro", ignoreCase = true)) newlyExcluded += "nitro"
+
+                        if ((newlyExcluded - excludedFields).isNotEmpty()) {
+                            return@withContext sendMessageInternal(
+                                profile = profile,
+                                history = history,
+                                sessionSystemPrompt = sessionSystemPrompt,
+                                excludedFields = excludedFields + newlyExcluded,
+                                retriesLeft = retriesLeft - 1,
+                                onStreamUpdate = onStreamUpdate,
+                                onCallCreated = onCallCreated,
+                            )
+                        }
                     }
                     val formattedErr = runCatching {
                         val tok = JSONTokener(errBody).nextValue()
@@ -655,7 +720,20 @@ object UniversalApiClient {
                     }
                 }
                 require(models.isNotEmpty()) { "接口未返回模型列表" }
-                models.sorted()
+                val sorted = models.sorted()
+                val preferredPrefix = when {
+                    !ModelCatalog.isOpenRouter(profile) -> null
+                    profile.id.contains("claude", true) || profile.model.contains("claude", true) || profile.name.contains("claude", true) -> "anthropic/"
+                    profile.id.contains("gpt", true) || profile.model.startsWith("openai/", true) || profile.name.contains("chatgpt", true) -> "openai/"
+                    else -> null
+                }
+                if (preferredPrefix != null) {
+                    val top = sorted.filter { it.startsWith(preferredPrefix, ignoreCase = true) }
+                    val rest = sorted.filterNot { it.startsWith(preferredPrefix, ignoreCase = true) }
+                    top + rest
+                } else {
+                    sorted
+                }
             }
         }
     }

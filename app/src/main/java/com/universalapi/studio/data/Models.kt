@@ -44,6 +44,8 @@ data class ApiProfile(
     val customBodyTemplate: String = "",
     val customResponsePath: String = "",
     val contextWindow: Int = 128000,
+    val reasoningEffort: String = "",
+    val speedMode: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -62,6 +64,8 @@ data class ApiProfile(
         put("customBodyTemplate", customBodyTemplate)
         put("customResponsePath", customResponsePath)
         put("contextWindow", contextWindow)
+        put("reasoningEffort", reasoningEffort)
+        put("speedMode", speedMode)
     }
 
     companion object {
@@ -93,9 +97,111 @@ data class ApiProfile(
                 customBodyTemplate = obj.optString("customBodyTemplate", ""),
                 customResponsePath = obj.optString("customResponsePath", ""),
                 contextWindow = ctxWindowVal,
+                reasoningEffort = obj.optString("reasoningEffort", ""),
+                speedMode = obj.optString("speedMode", ""),
             )
         }
     }
+}
+
+data class ModelPreset(
+    val id: String,
+    val displayName: String,
+    val contextWindow: Int,
+    val tag: String = "",
+)
+
+data class OptionItem(
+    val value: String,
+    val shortLabel: String,
+    val label: String,
+    val hint: String = "",
+)
+
+object ModelCatalog {
+    val claudeModels = listOf(
+        ModelPreset("anthropic/claude-opus-5.5", "Opus 5.5", 1_000_000, "旗舰"),
+        ModelPreset("anthropic/claude-sonnet-5.5", "Sonnet 5.5", 1_000_000, "均衡"),
+        ModelPreset("anthropic/claude-haiku-5.5", "Haiku 5.5", 1_000_000, "极速"),
+        ModelPreset("anthropic/claude-fable-5.2", "Fable 5.2", 1_000_000, "创作"),
+        ModelPreset("anthropic/claude-opus-5", "Opus 5", 1_000_000, "经典"),
+        ModelPreset("anthropic/claude-sonnet-5", "Sonnet 5", 1_000_000, "经典"),
+    )
+
+    val gptModels = listOf(
+        ModelPreset("openai/gpt-6.2-astra", "GPT-6.2 Astra", 1_050_000, "旗舰"),
+        ModelPreset("openai/gpt-6.2-astra-pro", "GPT-6.2 Astra Pro", 1_050_000, "Pro"),
+        ModelPreset("openai/gpt-6.2-sol", "GPT-6.2 Sol", 1_050_000, "均衡"),
+        ModelPreset("openai/gpt-6.2-sol-pro", "GPT-6.2 Sol Pro", 1_050_000, "Pro"),
+        ModelPreset("openai/gpt-6.1-terra", "GPT-6.1 Terra", 1_050_000, "高效"),
+        ModelPreset("openai/gpt-6.1-terra-pro", "GPT-6.1 Terra Pro", 1_050_000, "Pro"),
+        ModelPreset("openai/gpt-6-luna", "GPT-6 Luna", 1_050_000, "轻量"),
+    )
+
+    val deepseekModels = listOf(
+        ModelPreset("deepseek-chat", "DeepSeek Chat", 128_000, "对话"),
+        ModelPreset("deepseek-reasoner", "DeepSeek Reasoner", 128_000, "深度思考"),
+    )
+
+    val reasoningEfforts = listOf(
+        OptionItem("", "默认", "默认 (不传)", "沿用模型/服务端默认思考策略"),
+        OptionItem("none", "关闭", "关闭 (none)", "跳过思考，最快响应"),
+        OptionItem("minimal", "极简", "极简 (minimal)", "极少量思维链"),
+        OptionItem("low", "低", "低 (low)", "轻量思考，较快"),
+        OptionItem("medium", "中", "中 (medium)", "平衡速度与推理深度"),
+        OptionItem("high", "高", "高 (high)", "深度推理，适合编程与复杂分析"),
+        OptionItem("xhigh", "超高", "超高 (xhigh)", "超深推理预算"),
+        OptionItem("max", "极限", "极限 (max)", "最大推理预算"),
+    )
+
+    val speedModes = listOf(
+        OptionItem("", "标准", "标准速度", "默认标准路由与队列"),
+        OptionItem("fast", "⚡ Fast", "⚡ Fast (快速模式)", "注入 service_tier=\"fast\" 加速"),
+        OptionItem("ultrafast", "⚡ Ultrafast", "⚡ Ultrafast (极速档)", "注入 service_tier=\"ultrafast\""),
+        OptionItem("nitro", "🚀 Nitro", "🚀 Nitro (高吞吐)", "OpenRouter :nitro + 吞吐优先"),
+        OptionItem("latency", "⏱ 低延迟", "⏱ 低延迟优先", "OpenRouter latency 排序 / priority"),
+        OptionItem("flex", "💰 Flex", "💰 Flex (省钱降速)", "低优先/低价队列"),
+    )
+
+    fun isOpenRouter(profile: ApiProfile): Boolean =
+        profile.baseUrl.contains("openrouter.ai", ignoreCase = true)
+
+    fun presetsForProfile(profile: ApiProfile): List<ModelPreset> {
+        val id = profile.id.lowercase()
+        val name = profile.name.lowercase()
+        val model = profile.model.lowercase()
+        val base = profile.baseUrl.lowercase()
+
+        return when {
+            id.contains("claude") || model.contains("claude") || name.contains("claude") ->
+                if (base.contains("api.anthropic.com")) {
+                    claudeModels.map { it.copy(id = it.id.removePrefix("anthropic/")) }
+                } else claudeModels
+            id.contains("gpt") || model.startsWith("openai/") || model.contains("gpt") || name.contains("chatgpt") ->
+                if (base.contains("api.openai.com")) {
+                    gptModels.map { it.copy(id = it.id.removePrefix("openai/")) }
+                } else gptModels
+            id.contains("deepseek") || model.contains("deepseek") || base.contains("deepseek") -> deepseekModels
+            isOpenRouter(profile) -> claudeModels + gptModels
+            else -> emptyList()
+        }
+    }
+
+    fun displayModelShort(modelId: String): String {
+        val cleanId = modelId.substringBefore(":").trim()
+        val preset = (claudeModels + gptModels + deepseekModels)
+            .firstOrNull {
+                it.id.equals(cleanId, ignoreCase = true) ||
+                    it.id.substringAfterLast("/").equals(cleanId, ignoreCase = true)
+            }
+        return preset?.displayName ?: cleanId.substringAfterLast("/").ifBlank { modelId }
+    }
+
+    fun effortOption(value: String): OptionItem =
+        reasoningEfforts.firstOrNull { it.value == value } ?: reasoningEfforts.first()
+
+    fun speedOption(value: String): OptionItem =
+        speedModes.firstOrNull { it.value == value } ?: speedModes.first()
 }
 
 data class TokenUsage(

@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,8 +33,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -83,6 +86,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +94,7 @@ import com.universalapi.studio.data.ApiProfile
 import com.universalapi.studio.data.AppRepository
 import com.universalapi.studio.data.ChatMessage
 import com.universalapi.studio.data.ChatSession
+import com.universalapi.studio.data.ModelCatalog
 import com.universalapi.studio.data.TokenEstimator
 import com.universalapi.studio.network.UniversalApiClient
 import com.universalapi.studio.ui.theme.Brand
@@ -136,6 +141,20 @@ fun MainChatScreen(
     var showSessionPromptDialog by remember { mutableStateOf(false) }
     var showUsageDialog by remember { mutableStateOf(false) }
     var inspectingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+
+    var showModelDropdown by remember { mutableStateOf(false) }
+    var showEffortDropdown by remember { mutableStateOf(false) }
+    var showSpeedDropdown by remember { mutableStateOf(false) }
+    var fetchedQuickModels by remember(currentProfile.id) { mutableStateOf<List<String>>(emptyList()) }
+    var isFetchingQuickModels by remember { mutableStateOf(false) }
+
+    fun updateCurrentProfile(transform: (ApiProfile) -> ApiProfile) {
+        val updated = profiles.map {
+            if (it.id == currentProfile.id) transform(it) else it
+        }
+        profiles = updated
+        repository.saveProfiles(updated)
+    }
 
     val usageSummary = remember(
         currentSession.messages,
@@ -350,9 +369,15 @@ fun MainChatScreen(
             profiles = profiles,
             activeProfileId = activeProfileId,
             onSaveAll = { updated, newActiveId ->
-                profiles = updated
+                val edited = updated.firstOrNull { it.id == newActiveId }
+                val synced = if (edited != null && edited.apiKey.isNotBlank()) {
+                    repository.applyKeyToMatchingOpenRouterProfiles(updated, edited, edited.apiKey)
+                } else {
+                    updated
+                }
+                profiles = synced
                 activeProfileId = newActiveId
-                repository.saveProfiles(updated)
+                repository.saveProfiles(synced)
                 repository.saveActiveProfileId(newActiveId)
                 Toast.makeText(context, "API 配置已保存并生效", Toast.LENGTH_SHORT).show()
             },
@@ -447,7 +472,7 @@ fun MainChatScreen(
                     ) {
                         Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("关于开源版 · v1.0.0")
+                        Text("关于开源版 · v1.1.0")
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -498,7 +523,7 @@ fun MainChatScreen(
                                         Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
                                     }
                                     Text(
-                                        text = "${currentProfile.model} · ${if (currentProfile.stream) "SSE流式" else "标准JSON"}",
+                                        text = "${UniversalApiClient.resolveEffectiveModelId(currentProfile)} · ${if (currentProfile.stream) "SSE" else "JSON"}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -569,6 +594,21 @@ fun MainChatScreen(
                         item {
                             EmptyStateCard(
                                 profile = currentProfile,
+                                onSaveApiKey = { rawKey ->
+                                    val trimmed = rawKey.trim()
+                                    if (trimmed.isEmpty()) {
+                                        Toast.makeText(context, "请先粘贴或输入有效的 API Key", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val synced = repository.applyKeyToMatchingOpenRouterProfiles(
+                                            profiles = profiles,
+                                            editedProfile = currentProfile,
+                                            newKey = trimmed,
+                                        )
+                                        profiles = synced
+                                        repository.saveProfiles(synced)
+                                        Toast.makeText(context, "API Key 已保存，可以直接发送对话", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 onOpenConfig = { showConfigEditor = true },
                                 onSendTest = { sendPrompt("你好，请回复一句简短确认信息，测试当前接口连通性。") },
                             )
@@ -600,6 +640,181 @@ fun MainChatScreen(
                         .border(1.dp, Brand.Border, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        // 主界面快捷控制栏：同家族模型 / 思考等级 (Effort) / 速度模式
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val familyPresets = remember(currentProfile.id, currentProfile.baseUrl, currentProfile.model) {
+                                ModelCatalog.presetsForProfile(currentProfile)
+                            }
+                            val effortOpt = ModelCatalog.effortOption(currentProfile.reasoningEffort)
+                            val speedOpt = ModelCatalog.speedOption(currentProfile.speedMode)
+
+                            // 1. 模型速切
+                            Box {
+                                QuickControlChip(
+                                    label = "${ModelCatalog.displayModelShort(currentProfile.model)} ⌄",
+                                    highlighted = false,
+                                    accentColor = Brand.Accent,
+                                    onClick = { showModelDropdown = true },
+                                )
+                                DropdownMenu(
+                                    expanded = showModelDropdown,
+                                    onDismissRequest = { showModelDropdown = false },
+                                ) {
+                                    if (familyPresets.isNotEmpty()) {
+                                        familyPresets.forEach { preset ->
+                                            val isSelected = currentProfile.model.substringBefore(":")
+                                                .equals(preset.id, ignoreCase = true)
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Column {
+                                                        Text(
+                                                            text = if (preset.tag.isNotBlank()) "${preset.displayName} · ${preset.tag}" else preset.displayName,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        )
+                                                        Text(
+                                                            text = preset.id,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        )
+                                                    }
+                                                },
+                                                trailingIcon = if (isSelected) {
+                                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Brand.Success) }
+                                                } else null,
+                                                onClick = {
+                                                    updateCurrentProfile {
+                                                        it.copy(model = preset.id, contextWindow = preset.contextWindow)
+                                                    }
+                                                    showModelDropdown = false
+                                                },
+                                            )
+                                        }
+                                        HorizontalDivider()
+                                    }
+                                    if (fetchedQuickModels.isNotEmpty()) {
+                                        fetchedQuickModels.take(25).forEach { mId ->
+                                            val isSelected = currentProfile.model.equals(mId, ignoreCase = true)
+                                            DropdownMenuItem(
+                                                text = { Text(mId, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                                trailingIcon = if (isSelected) {
+                                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Brand.Success) }
+                                                } else null,
+                                                onClick = {
+                                                    updateCurrentProfile { it.copy(model = mId) }
+                                                    showModelDropdown = false
+                                                },
+                                            )
+                                        }
+                                        HorizontalDivider()
+                                    }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(if (isFetchingQuickModels) "拉取模型列表中..." else "🔄 从接口拉取在线模型")
+                                        },
+                                        enabled = !isFetchingQuickModels,
+                                        onClick = {
+                                            scope.launch {
+                                                isFetchingQuickModels = true
+                                                UniversalApiClient.fetchModels(currentProfile)
+                                                    .onSuccess { list ->
+                                                        fetchedQuickModels = list
+                                                        Toast.makeText(context, "已获取 ${list.size} 个模型", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                    .onFailure { err ->
+                                                        Toast.makeText(context, "拉取失败：${err.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                isFetchingQuickModels = false
+                                            }
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("⚙️ 自定义模型 / 接口设置...") },
+                                        onClick = {
+                                            showModelDropdown = false
+                                            showConfigEditor = true
+                                        },
+                                    )
+                                }
+                            }
+
+                            // 2. 思考等级 (Effort)
+                            Box {
+                                QuickControlChip(
+                                    label = "思考: ${effortOpt.shortLabel} ⌄",
+                                    highlighted = currentProfile.reasoningEffort.isNotBlank() && currentProfile.reasoningEffort != "none",
+                                    accentColor = Brand.AccentSoft,
+                                    onClick = { showEffortDropdown = true },
+                                )
+                                DropdownMenu(
+                                    expanded = showEffortDropdown,
+                                    onDismissRequest = { showEffortDropdown = false },
+                                ) {
+                                    ModelCatalog.reasoningEfforts.forEach { opt ->
+                                        val isSelected = currentProfile.reasoningEffort == opt.value
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(opt.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                                    if (opt.hint.isNotBlank()) {
+                                                        Text(opt.hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                            },
+                                            trailingIcon = if (isSelected) {
+                                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Brand.Success) }
+                                            } else null,
+                                            onClick = {
+                                                updateCurrentProfile { it.copy(reasoningEffort = opt.value) }
+                                                showEffortDropdown = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 3. 速度模式 (Speed / Service Tier)
+                            Box {
+                                QuickControlChip(
+                                    label = "速度: ${speedOpt.shortLabel} ⌄",
+                                    highlighted = currentProfile.speedMode.isNotBlank(),
+                                    accentColor = Brand.Cyan,
+                                    onClick = { showSpeedDropdown = true },
+                                )
+                                DropdownMenu(
+                                    expanded = showSpeedDropdown,
+                                    onDismissRequest = { showSpeedDropdown = false },
+                                ) {
+                                    ModelCatalog.speedModes.forEach { opt ->
+                                        val isSelected = currentProfile.speedMode == opt.value
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(opt.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                                    if (opt.hint.isNotBlank()) {
+                                                        Text(opt.hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                            },
+                                            trailingIcon = if (isSelected) {
+                                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Brand.Success) }
+                                            } else null,
+                                            onClick = {
+                                                updateCurrentProfile { it.copy(speedMode = opt.value) }
+                                                showSpeedDropdown = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         if (currentSession.sessionSystemPrompt.isNotBlank()) {
                             Text(
                                 text = "当前会话临时 System Prompt 已启用",
@@ -755,7 +970,7 @@ fun MainChatScreen(
             title = { Text("关于 Universal API Studio (开源版)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("版本: v1.0.0 (Open Source Edition)", style = MaterialTheme.typography.bodySmall)
+                    Text("版本: v1.1.0 (Open Source Edition)", style = MaterialTheme.typography.bodySmall)
                     Text("包名: com.universalapi.studio.oss", style = MaterialTheme.typography.bodySmall)
                     Text("开源协议: GNU GPLv3", style = MaterialTheme.typography.bodySmall, color = Brand.AccentSoft)
                     Text("软件作者: @Azumaserne", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -801,9 +1016,14 @@ fun MainChatScreen(
 @Composable
 private fun EmptyStateCard(
     profile: ApiProfile,
+    onSaveApiKey: (String) -> Unit,
     onOpenConfig: () -> Unit,
     onSendTest: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var apiKeyDraft by remember(profile.id) { mutableStateOf("") }
+    val needsKey = profile.apiKey.isBlank() && !profile.baseUrl.contains("httpbin.org", ignoreCase = true)
+
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         shape = RoundedCornerShape(22.dp),
@@ -819,10 +1039,69 @@ private fun EmptyStateCard(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "当前渠道：${profile.name}\n请求地址：${UniversalApiClient.resolveEndpointUrl(profile)}\n模型：${profile.model} · 自定义请求头：${profile.customHeaders.count { it.enabled }} 个",
+                text = "当前渠道：${profile.name}\n请求地址：${UniversalApiClient.resolveEndpointUrl(profile)}\n模型：${UniversalApiClient.resolveEffectiveModelId(profile)} · 自定义请求头：${profile.customHeaders.count { it.enabled }} 个",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (needsKey) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brand.Input.copy(alpha = 0.75f), RoundedCornerShape(14.dp))
+                        .border(1.dp, Brand.Warning.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "粘贴 API Key 即可直接开聊",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Brand.Warning,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (ModelCatalog.isOpenRouter(profile)) {
+                        Text(
+                            text = "输入 OpenRouter Key (sk-or-...) 后会自动同步到 Claude 与 ChatGPT 预设，无需重复填写。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Brand.TextSecondary,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = apiKeyDraft,
+                            onValueChange = { apiKeyDraft = it },
+                            placeholder = { Text("sk-...", fontSize = 13.sp) },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Button(
+                            onClick = { onSaveApiKey(apiKeyDraft) },
+                        ) {
+                            Text("保存")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty().trim()
+                            if (clip.isEmpty()) {
+                                Toast.makeText(context, "剪贴板为空，请先复制 API Key", Toast.LENGTH_SHORT).show()
+                            } else {
+                                apiKeyDraft = clip
+                                onSaveApiKey(clip)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("从剪贴板一键粘贴并启用")
+                    }
+                }
+            }
             Text(
                 text = "by @Azumaserne",
                 style = MaterialTheme.typography.labelSmall,
@@ -839,6 +1118,36 @@ private fun EmptyStateCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QuickControlChip(
+    label: String,
+    highlighted: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (highlighted) accentColor.copy(alpha = 0.14f) else Brand.SurfaceHigh.copy(alpha = 0.75f))
+            .border(
+                1.dp,
+                if (highlighted) accentColor.copy(alpha = 0.6f) else Brand.Border,
+                RoundedCornerShape(10.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (highlighted) accentColor else Brand.TextSecondary,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
