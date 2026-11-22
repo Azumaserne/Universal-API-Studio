@@ -7,7 +7,7 @@
 [![Android](https://img.shields.io/badge/Platform-Android%207.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.24-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
-[![License: Non-Commercial](https://img.shields.io/badge/License-Non--Commercial%20(No%20Sale)-red.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 *Designed & Authored by **[@Azumaserne](https://github.com/kaka714/Universal-API-Studio)***
 
@@ -96,8 +96,8 @@ app/build/outputs/apk/release/app-release.apk
 
 ## 📄 开源协议与版权声明
 
-本项目采用 [**Non-Commercial License（非商业使用许可协议）**](LICENSE) 开源：
-- ✅ **允许**：个人免费使用、学习研究、二次修改及非商业免费分享（需保留 `@Azumaserne` 作者署名）。
-- 🚫 **严禁销售与倒卖**：未经作者 `@Azumaserne` 书面授权，**禁止任何个人或机构将本软件源码、修改版或编译后的 APK 用于商业销售、收费代装、捆绑销售或在闲鱼/淘宝等平台倒卖牟利**。
+本项目采用 [**GNU General Public License v3.0 (GPLv3)**](LICENSE) 开源协议（强传染性 Copyleft）：
+- ✅ **允许**：任何个人与组织自由运行、研究、修改和分发本软件及其源码。
+- 📜 **必须开源与保留署名**：任何基于本项目的修改版、衍生作品或打包分发，**必须完整保留原作者 `@Azumaserne` 的版权声明，且必须以同样的 GPLv3 协议向所有接收者公开全部源代码**（禁止将其闭源修改后独占或闭源倒卖）。
 
 Copyright © 2026 **[@Azumaserne](https://github.com/kaka714/Universal-API-Studio)**
