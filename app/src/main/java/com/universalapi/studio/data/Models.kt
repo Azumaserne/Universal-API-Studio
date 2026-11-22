@@ -139,8 +139,15 @@ object ModelCatalog {
     )
 
     val deepseekModels = listOf(
-        ModelPreset("deepseek-chat", "DeepSeek Chat", 128_000, "对话"),
-        ModelPreset("deepseek-reasoner", "DeepSeek Reasoner", 128_000, "深度思考"),
+        ModelPreset("deepseek-flash", "DeepSeek V4.1 Flash", 1_048_576, "极速/视觉"),
+        ModelPreset("deepseek-v4-pro", "DeepSeek V4.0 Pro", 1_048_576, "旗舰推理"),
+    )
+
+    val openRouterDeepseekModels = listOf(
+        ModelPreset("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 1_048_576, "主力"),
+        ModelPreset("deepseek/deepseek-v4-pro", "DeepSeek V4.0 Pro", 1_048_576, "旗舰"),
+        ModelPreset("deepseek/deepseek-v4.1-flash-1017", "V4.1 Flash 1017", 1_048_576, "快照"),
+        ModelPreset("deepseek/deepseek-v4-pro-0813", "V4.0 Pro 0813", 1_048_576, "快照"),
     )
 
     val reasoningEfforts = listOf(
@@ -166,6 +173,9 @@ object ModelCatalog {
     fun isOpenRouter(profile: ApiProfile): Boolean =
         profile.baseUrl.contains("openrouter.ai", ignoreCase = true)
 
+    fun isDeepSeekDirect(profile: ApiProfile): Boolean =
+        profile.baseUrl.contains("api.deepseek.com", ignoreCase = true)
+
     fun presetsForProfile(profile: ApiProfile): List<ModelPreset> {
         val id = profile.id.lowercase()
         val name = profile.name.lowercase()
@@ -173,6 +183,8 @@ object ModelCatalog {
         val base = profile.baseUrl.lowercase()
 
         return when {
+            id.contains("deepseek") || model.contains("deepseek") || base.contains("deepseek") ->
+                if (isOpenRouter(profile)) openRouterDeepseekModels else deepseekModels
             id.contains("claude") || model.contains("claude") || name.contains("claude") ->
                 if (base.contains("api.anthropic.com")) {
                     claudeModels.map { it.copy(id = it.id.removePrefix("anthropic/")) }
@@ -181,19 +193,18 @@ object ModelCatalog {
                 if (base.contains("api.openai.com")) {
                     gptModels.map { it.copy(id = it.id.removePrefix("openai/")) }
                 } else gptModels
-            id.contains("deepseek") || model.contains("deepseek") || base.contains("deepseek") -> deepseekModels
-            isOpenRouter(profile) -> claudeModels + gptModels
+            isOpenRouter(profile) -> claudeModels + gptModels + openRouterDeepseekModels
             else -> emptyList()
         }
     }
 
     fun displayModelShort(modelId: String): String {
         val cleanId = modelId.substringBefore(":").trim()
-        val preset = (claudeModels + gptModels + deepseekModels)
-            .firstOrNull {
-                it.id.equals(cleanId, ignoreCase = true) ||
-                    it.id.substringAfterLast("/").equals(cleanId, ignoreCase = true)
-            }
+        val allPresets = claudeModels + gptModels + deepseekModels + openRouterDeepseekModels
+        val preset = allPresets.firstOrNull {
+            it.id.equals(cleanId, ignoreCase = true) ||
+                it.id.substringAfterLast("/").equals(cleanId, ignoreCase = true)
+        }
         return preset?.displayName ?: cleanId.substringAfterLast("/").ifBlank { modelId }
     }
 

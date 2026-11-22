@@ -125,6 +125,7 @@ object UniversalApiClient {
         }
 
         val isOpenRouter = ModelCatalog.isOpenRouter(profile)
+        val isDeepSeekDirect = ModelCatalog.isDeepSeekDirect(profile)
         val root = JSONObject().apply {
             put("model", effectiveModel)
             put("messages", messagesArr)
@@ -140,11 +141,31 @@ object UniversalApiClient {
             }
         }
 
-        if (!profile.useExactUrl && profile.reasoningEffort.isNotBlank() && "reasoning" !in excludedFields) {
-            if (isOpenRouter) {
-                root.put("reasoning", JSONObject().apply { put("effort", profile.reasoningEffort) })
-            } else if (profile.reasoningEffort != "none") {
-                root.put("reasoning_effort", profile.reasoningEffort)
+        if (!profile.useExactUrl && profile.reasoningEffort.isNotBlank()) {
+            when {
+                isOpenRouter -> {
+                    if ("reasoning" !in excludedFields) {
+                        root.put("reasoning", JSONObject().apply { put("effort", profile.reasoningEffort) })
+                    }
+                }
+                isDeepSeekDirect -> {
+                    if ("reasoning" !in excludedFields) {
+                        root.put("reasoning_effort", profile.reasoningEffort)
+                    }
+                    if ("thinking" !in excludedFields) {
+                        root.put(
+                            "thinking",
+                            JSONObject().apply {
+                                put("type", if (profile.reasoningEffort == "none") "disabled" else "enabled")
+                            },
+                        )
+                    }
+                }
+                else -> {
+                    if ("reasoning" !in excludedFields && profile.reasoningEffort != "none") {
+                        root.put("reasoning_effort", profile.reasoningEffort)
+                    }
+                }
             }
         }
 
@@ -507,6 +528,7 @@ object UniversalApiClient {
                         if (errBody.contains("service_tier", ignoreCase = true)) newlyExcluded += "service_tier"
                         if (errBody.contains("provider", ignoreCase = true)) newlyExcluded += "provider"
                         if (errBody.contains("reasoning", ignoreCase = true)) newlyExcluded += "reasoning"
+                        if (errBody.contains("thinking", ignoreCase = true)) newlyExcluded += "thinking"
                         if (errBody.contains("temperature", ignoreCase = true)) newlyExcluded += "temperature"
                         if (errBody.contains("top_p", ignoreCase = true)) newlyExcluded += "top_p"
                         if (errBody.contains(":nitro", ignoreCase = true)) newlyExcluded += "nitro"
@@ -723,6 +745,7 @@ object UniversalApiClient {
                 val sorted = models.sorted()
                 val preferredPrefix = when {
                     !ModelCatalog.isOpenRouter(profile) -> null
+                    profile.id.contains("deepseek", true) || profile.model.contains("deepseek", true) || profile.name.contains("deepseek", true) -> "deepseek/"
                     profile.id.contains("claude", true) || profile.model.contains("claude", true) || profile.name.contains("claude", true) -> "anthropic/"
                     profile.id.contains("gpt", true) || profile.model.startsWith("openai/", true) || profile.name.contains("chatgpt", true) -> "openai/"
                     else -> null

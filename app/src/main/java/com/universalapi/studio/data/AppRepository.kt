@@ -13,6 +13,7 @@ class AppRepository(context: Context) {
         private const val KEY_SESSIONS = "chat_sessions_json"
         private const val KEY_ACTIVE_SESSION_ID = "active_session_id"
         private const val KEY_MIGRATED_OPENROUTER_V11 = "migrated_openrouter_v11"
+        private const val KEY_MIGRATED_DEEPSEEK_V4_V11 = "migrated_deepseek_v4_v11"
 
         private fun openRouterDefaultHeaders(): List<HeaderPair> = listOf(
             HeaderPair(key = "HTTP-Referer", value = "https://github.com/kaka714/Universal-API-Studio", enabled = true),
@@ -42,6 +43,17 @@ class AppRepository(context: Context) {
                 speedMode = "",
                 customHeaders = openRouterDefaultHeaders(),
             ),
+            ApiProfile(
+                id = "default-openrouter-deepseek",
+                name = "OpenRouter · DeepSeek",
+                baseUrl = "https://openrouter.ai/api/v1",
+                model = "deepseek/deepseek-v4.1-flash",
+                stream = true,
+                contextWindow = 1_048_576,
+                reasoningEffort = "medium",
+                speedMode = "",
+                customHeaders = openRouterDefaultHeaders(),
+            ),
         )
 
         fun defaultProfiles(): List<ApiProfile> = openRouterPresetProfiles() + listOf(
@@ -49,8 +61,10 @@ class AppRepository(context: Context) {
                 id = "default-deepseek",
                 name = "DeepSeek API 模板",
                 baseUrl = "https://api.deepseek.com/v1",
-                model = "deepseek-chat",
+                model = "deepseek-flash",
                 stream = true,
+                contextWindow = 1_048_576,
+                reasoningEffort = "medium",
                 systemPrompt = "",
             ),
             ApiProfile(
@@ -82,10 +96,13 @@ class AppRepository(context: Context) {
         if (raw == null) {
             val defaults = defaultProfiles()
             saveProfiles(defaults)
-            prefs.edit().putBoolean(KEY_MIGRATED_OPENROUTER_V11, true).apply()
+            prefs.edit()
+                .putBoolean(KEY_MIGRATED_OPENROUTER_V11, true)
+                .putBoolean(KEY_MIGRATED_DEEPSEEK_V4_V11, true)
+                .apply()
             return defaults
         }
-        val parsed = runCatching {
+        var current = runCatching {
             val arr = JSONArray(raw)
             buildList {
                 for (i in 0 until arr.length()) {
@@ -94,17 +111,45 @@ class AppRepository(context: Context) {
             }.ifEmpty { defaultProfiles() }
         }.getOrElse { defaultProfiles() }
 
-        if (!prefs.getBoolean(KEY_MIGRATED_OPENROUTER_V11, false)) {
-            val existingIds = parsed.map { it.id }.toSet()
-            val missing = openRouterPresetProfiles().filter { it.id !in existingIds }
-            val merged = if (missing.isNotEmpty()) missing + parsed else parsed
-            if (missing.isNotEmpty()) {
-                saveProfiles(merged)
+        var dirty = false
+        if (!prefs.getBoolean(KEY_MIGRATED_OPENROUTER_V11, false) ||
+            !prefs.getBoolean(KEY_MIGRATED_DEEPSEEK_V4_V11, false)
+        ) {
+            // 将旧版已退役的 deepseek-chat / deepseek-reasoner 迁移为 V4.1 Flash / V4.0 Pro
+            current = current.map { p ->
+                if (p.id == "default-deepseek") {
+                    when (p.model.lowercase()) {
+                        "deepseek-chat" -> {
+                            dirty = true
+                            p.copy(model = "deepseek-flash", contextWindow = 1_048_576)
+                        }
+                        "deepseek-reasoner" -> {
+                            dirty = true
+                            p.copy(model = "deepseek-v4-pro", contextWindow = 1_048_576, reasoningEffort = p.reasoningEffort.ifBlank { "high" })
+                        }
+                        else -> p
+                    }
+                } else p
             }
-            prefs.edit().putBoolean(KEY_MIGRATED_OPENROUTER_V11, true).apply()
-            return merged
+
+            val existingOpenRouterKey = current.firstOrNull { ModelCatalog.isOpenRouter(it) && it.apiKey.isNotBlank() }?.apiKey.orEmpty()
+            val existingIds = current.map { it.id }.toSet()
+            val missing = openRouterPresetProfiles()
+                .filter { it.id !in existingIds }
+                .map { if (existingOpenRouterKey.isNotBlank()) it.copy(apiKey = existingOpenRouterKey) else it }
+            if (missing.isNotEmpty()) {
+                current = missing + current
+                dirty = true
+            }
+            if (dirty) {
+                saveProfiles(current)
+            }
+            prefs.edit()
+                .putBoolean(KEY_MIGRATED_OPENROUTER_V11, true)
+                .putBoolean(KEY_MIGRATED_DEEPSEEK_V4_V11, true)
+                .apply()
         }
-        return parsed
+        return current
     }
 
     fun applyKeyToMatchingOpenRouterProfiles(

@@ -1060,7 +1060,7 @@ private fun EmptyStateCard(
                     )
                     if (ModelCatalog.isOpenRouter(profile)) {
                         Text(
-                            text = "输入 OpenRouter Key (sk-or-...) 后会自动同步到 Claude 与 ChatGPT 预设，无需重复填写。",
+                            text = "输入 OpenRouter Key (sk-or-...) 后会自动同步到 ChatGPT、Claude 与 DeepSeek 预设，无需重复填写。",
                             style = MaterialTheme.typography.labelSmall,
                             color = Brand.TextSecondary,
                         )
