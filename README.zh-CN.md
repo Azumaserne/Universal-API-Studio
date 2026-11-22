@@ -22,6 +22,7 @@
 **Universal API Studio (OSS)** 是一款基于 **Kotlin + Jetpack Compose + OkHttp** 构建的纯原生 Android 客户端，专为高频调用大模型 API 与调试自定义 HTTP/JSON 接口而设计：
 
 - **📦 极简轻量**：Release APK 仅约 **1.2MB**，原生渲染零 WebView 卡顿，零广告、零遥测，所有密钥与聊天记录 100% 本地存储。
+- **🌐 8 国语言自适应 & 动效欢迎页（`v1.2.0`）**：首次启动呈现基于系统无版权字体打造的「欢迎」跳动渐变引导页，支持 **简体中文 / English / 粵語 / 日本語 / 한국어 / Deutsch / Français / Español** 一键切换，之后也可随时在侧边栏与设置中更改界面语言。
 - **📊 顶部栏实时上下文 & Cache Hit 监控**：API 模板右侧内置实时状态胶囊，直观展示当前上下文窗口占用（如 `上下文 1.2k/128k (1%)`）与 Prompt Cache 命中率（如 `Cache 78% (960)`），点击即可展开详情并快捷切换 `32K / 64K / 128K / 200K / 1M` 上下文窗口。
 - **🔌 全协议兼容 & 开箱即用 OpenRouter 预设**：内置 **OpenRouter · ChatGPT**（`GPT-6.2 Astra / Sol`、`GPT-6.1 Terra`、`GPT-6 Luna`）、**OpenRouter · Claude**（`Opus / Sonnet / Haiku / Fable`）以及 **OpenRouter / 官方直连 DeepSeek**（`DeepSeek V4.1 Flash`、`DeepSeek V4.0 Pro`）标准渠道，粘贴一次 OpenRouter Key 即可自动同步共用；同时支持 OneAPI / NewAPI 中转，或开启「严格原始 URL」对接任意自定义 POST 接口。
 - **🧠 思考等级 (Effort) & 速度模式速切**：输入框上方内置快捷条，单手即可切换同家族模型、调整思考等级（`none / minimal / low / medium / high / xhigh / max`），以及选择速度/路由档位（`Fast`、`Ultrafast`、OpenRouter `:nitro`、低延迟或 `Flex`）。

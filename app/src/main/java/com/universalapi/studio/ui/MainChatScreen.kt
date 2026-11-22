@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Refresh
@@ -96,6 +97,9 @@ import com.universalapi.studio.data.ChatMessage
 import com.universalapi.studio.data.ChatSession
 import com.universalapi.studio.data.ModelCatalog
 import com.universalapi.studio.data.TokenEstimator
+import com.universalapi.studio.i18n.AppLanguage
+import com.universalapi.studio.i18n.LocalAppLanguage
+import com.universalapi.studio.i18n.LocalAppStrings
 import com.universalapi.studio.network.UniversalApiClient
 import com.universalapi.studio.ui.theme.Brand
 import com.universalapi.studio.ui.theme.GradientButton
@@ -116,7 +120,10 @@ fun MainChatScreen(
     repository: AppRepository,
     initialProfiles: List<ApiProfile>,
     initialActiveProfileId: String,
+    onChangeLanguage: (AppLanguage) -> Unit,
 ) {
+    val strings = LocalAppStrings.current
+    val currentLang = LocalAppLanguage.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -138,6 +145,7 @@ fun MainChatScreen(
     var showProfileDropdown by remember { mutableStateOf(false) }
     var showConfigEditor by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var showSessionPromptDialog by remember { mutableStateOf(false) }
     var showUsageDialog by remember { mutableStateOf(false) }
     var inspectingMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -218,7 +226,7 @@ fun MainChatScreen(
         )
     }
 
-    fun copyText(text: String, tip: String = "已复制到剪贴板") {
+    fun copyText(text: String, tip: String = strings.copiedMsg) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("uapi", text))
         Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
@@ -246,7 +254,7 @@ fun MainChatScreen(
 
     fun createNewSession() {
         val newSess = ChatSession(
-            title = "新对话 ${sessions.size + 1}",
+            title = "${strings.newChatPrefix} ${sessions.size + 1}",
             profileId = currentProfile.id,
         )
         updateSessions(listOf(newSess) + sessions)
@@ -273,7 +281,7 @@ fun MainChatScreen(
         val placeholderMsg = ChatMessage(
             id = assistantPlaceholderId,
             role = "assistant",
-            content = "正在请求 ${currentProfile.name} ...",
+            content = String.format(Locale.US, strings.requestingFmt, currentProfile.name),
         )
 
         if (overridePrompt == null && retryFromHistory == null) {
@@ -306,7 +314,7 @@ fun MainChatScreen(
                                     messages = sess.messages.map { m ->
                                         if (m.id == assistantPlaceholderId) {
                                             m.copy(
-                                                content = contentSoFar.ifEmpty { "接收响应中..." },
+                                                content = contentSoFar.ifEmpty { strings.receivingMsg },
                                                 reasoningContent = reasoningSoFar,
                                                 promptTokens = liveUsage?.promptTokens ?: m.promptTokens,
                                                 completionTokens = liveUsage?.completionTokens ?: m.completionTokens,
@@ -368,6 +376,7 @@ fun MainChatScreen(
         ApiConfigScreen(
             profiles = profiles,
             activeProfileId = activeProfileId,
+            onChangeLanguage = onChangeLanguage,
             onSaveAll = { updated, newActiveId ->
                 val edited = updated.firstOrNull { it.id == newActiveId }
                 val synced = if (edited != null && edited.apiKey.isNotBlank()) {
@@ -379,7 +388,7 @@ fun MainChatScreen(
                 activeProfileId = newActiveId
                 repository.saveProfiles(synced)
                 repository.saveActiveProfileId(newActiveId)
-                Toast.makeText(context, "API 配置已保存并生效", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, strings.configSavedMsg, Toast.LENGTH_SHORT).show()
             },
             onExportJson = { repository.exportProfilesJson(it) },
             onImportJson = { repository.importProfilesJson(it) },
@@ -398,7 +407,7 @@ fun MainChatScreen(
                         .padding(14.dp),
                 ) {
                     Text(
-                        text = "会话列表",
+                        text = strings.sessionsTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
@@ -412,7 +421,7 @@ fun MainChatScreen(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("新建对话")
+                        Text(strings.newChatBtn)
                     }
                     Spacer(Modifier.height(10.dp))
                     LazyColumn(modifier = Modifier.weight(1f)) {
@@ -426,7 +435,7 @@ fun MainChatScreen(
                                 ),
                                 label = {
                                     Text(
-                                        sess.title.ifBlank { "新对话" },
+                                        sess.title.ifBlank { strings.defaultChatTitle },
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -452,7 +461,7 @@ fun MainChatScreen(
                                         ) {
                                             Icon(
                                                 Icons.Default.Delete,
-                                                contentDescription = "删除会话",
+                                                contentDescription = strings.deleteSessionCd,
                                                 modifier = Modifier.size(16.dp),
                                             )
                                         }
@@ -466,13 +475,33 @@ fun MainChatScreen(
                     OutlinedButton(
                         onClick = {
                             scope.launch { drawerState.close() }
+                            showLanguageDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "🌐 ${strings.languageSettingBtn}",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch { drawerState.close() }
                             showAboutDialog = true
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("关于开源版 · v1.1.0")
+                        Text(
+                            strings.aboutOssBtn,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -498,7 +527,7 @@ fun MainChatScreen(
                     ),
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "打开菜单")
+                            Icon(Icons.Default.Menu, contentDescription = strings.menuCd)
                         }
                     },
                     title = {
@@ -513,7 +542,7 @@ fun MainChatScreen(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = currentProfile.name.ifBlank { "未命名接口" },
+                                            text = currentProfile.name.ifBlank { strings.unnamedProfile },
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1,
@@ -551,7 +580,7 @@ fun MainChatScreen(
                                     }
                                     HorizontalDivider()
                                     DropdownMenuItem(
-                                        text = { Text("⚙️ 管理 / 新增 API 配置...") },
+                                        text = { Text(strings.manageProfilesItem) },
                                         onClick = {
                                             showProfileDropdown = false
                                             showConfigEditor = true
@@ -567,10 +596,10 @@ fun MainChatScreen(
                     },
                     actions = {
                         IconButton(onClick = { showConfigEditor = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "接口配置")
+                            Icon(Icons.Default.Settings, contentDescription = strings.settingsCd)
                         }
                         IconButton(onClick = { showAboutDialog = true }) {
-                            Icon(Icons.Default.Info, contentDescription = "关于开源版", tint = Brand.AccentSoft)
+                            Icon(Icons.Default.Info, contentDescription = strings.aboutCd, tint = Brand.AccentSoft)
                         }
                     },
                 )
@@ -597,7 +626,7 @@ fun MainChatScreen(
                                 onSaveApiKey = { rawKey ->
                                     val trimmed = rawKey.trim()
                                     if (trimmed.isEmpty()) {
-                                        Toast.makeText(context, "请先粘贴或输入有效的 API Key", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.enterValidKeyMsg, Toast.LENGTH_SHORT).show()
                                     } else {
                                         val synced = repository.applyKeyToMatchingOpenRouterProfiles(
                                             profiles = profiles,
@@ -606,11 +635,11 @@ fun MainChatScreen(
                                         )
                                         profiles = synced
                                         repository.saveProfiles(synced)
-                                        Toast.makeText(context, "API Key 已保存，可以直接发送对话", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.keySavedReadyMsg, Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 onOpenConfig = { showConfigEditor = true },
-                                onSendTest = { sendPrompt("你好，请回复一句简短确认信息，测试当前接口连通性。") },
+                                onSendTest = { sendPrompt(strings.testConnectivityPrompt) },
                             )
                         }
                     } else {
@@ -640,7 +669,6 @@ fun MainChatScreen(
                         .border(1.dp, Brand.Border, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                        // 主界面快捷控制栏：同家族模型 / 思考等级 (Effort) / 速度模式
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -652,10 +680,7 @@ fun MainChatScreen(
                             val familyPresets = remember(currentProfile.id, currentProfile.baseUrl, currentProfile.model) {
                                 ModelCatalog.presetsForProfile(currentProfile)
                             }
-                            val effortOpt = ModelCatalog.effortOption(currentProfile.reasoningEffort)
-                            val speedOpt = ModelCatalog.speedOption(currentProfile.speedMode)
 
-                            // 1. 模型速切
                             Box {
                                 QuickControlChip(
                                     label = "${ModelCatalog.displayModelShort(currentProfile.model)} ⌄",
@@ -716,7 +741,7 @@ fun MainChatScreen(
                                     }
                                     DropdownMenuItem(
                                         text = {
-                                            Text(if (isFetchingQuickModels) "拉取模型列表中..." else "🔄 从接口拉取在线模型")
+                                            Text(if (isFetchingQuickModels) strings.fetchingModelsItem else strings.fetchOnlineModelsItem)
                                         },
                                         enabled = !isFetchingQuickModels,
                                         onClick = {
@@ -725,17 +750,25 @@ fun MainChatScreen(
                                                 UniversalApiClient.fetchModels(currentProfile)
                                                     .onSuccess { list ->
                                                         fetchedQuickModels = list
-                                                        Toast.makeText(context, "已获取 ${list.size} 个模型", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(
+                                                            context,
+                                                            String.format(Locale.US, strings.fetchedModelsToastFmt, list.size),
+                                                            Toast.LENGTH_SHORT,
+                                                        ).show()
                                                     }
                                                     .onFailure { err ->
-                                                        Toast.makeText(context, "拉取失败：${err.message}", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(
+                                                            context,
+                                                            String.format(Locale.US, strings.fetchFailedToastFmt, err.message.orEmpty()),
+                                                            Toast.LENGTH_SHORT,
+                                                        ).show()
                                                     }
                                                 isFetchingQuickModels = false
                                             }
                                         },
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("⚙️ 自定义模型 / 接口设置...") },
+                                        text = { Text(strings.customModelConfigItem) },
                                         onClick = {
                                             showModelDropdown = false
                                             showConfigEditor = true
@@ -744,10 +777,9 @@ fun MainChatScreen(
                                 }
                             }
 
-                            // 2. 思考等级 (Effort)
                             Box {
                                 QuickControlChip(
-                                    label = "思考: ${effortOpt.shortLabel} ⌄",
+                                    label = "${strings.effortPrefix}: ${strings.effortShort(currentProfile.reasoningEffort)} ⌄",
                                     highlighted = currentProfile.reasoningEffort.isNotBlank() && currentProfile.reasoningEffort != "none",
                                     accentColor = Brand.AccentSoft,
                                     onClick = { showEffortDropdown = true },
@@ -761,8 +793,11 @@ fun MainChatScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Column {
-                                                    Text(opt.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                                                    if (opt.hint.isNotBlank()) {
+                                                    Text(
+                                                        strings.effortLabel(opt.value),
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    )
+                                                    if (opt.hint.isNotBlank() && (currentLang == AppLanguage.ZH_CN || currentLang == AppLanguage.ZH_HK)) {
                                                         Text(opt.hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                 }
@@ -779,10 +814,9 @@ fun MainChatScreen(
                                 }
                             }
 
-                            // 3. 速度模式 (Speed / Service Tier)
                             Box {
                                 QuickControlChip(
-                                    label = "速度: ${speedOpt.shortLabel} ⌄",
+                                    label = "${strings.speedPrefix}: ${strings.speedShort(currentProfile.speedMode)} ⌄",
                                     highlighted = currentProfile.speedMode.isNotBlank(),
                                     accentColor = Brand.Cyan,
                                     onClick = { showSpeedDropdown = true },
@@ -796,8 +830,11 @@ fun MainChatScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Column {
-                                                    Text(opt.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                                                    if (opt.hint.isNotBlank()) {
+                                                    Text(
+                                                        strings.speedLabel(opt.value),
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    )
+                                                    if (opt.hint.isNotBlank() && (currentLang == AppLanguage.ZH_CN || currentLang == AppLanguage.ZH_HK)) {
                                                         Text(opt.hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                 }
@@ -817,7 +854,7 @@ fun MainChatScreen(
 
                         if (currentSession.sessionSystemPrompt.isNotBlank()) {
                             Text(
-                                text = "当前会话临时 System Prompt 已启用",
+                                text = strings.sessionPromptHint,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(bottom = 4.dp),
@@ -833,7 +870,7 @@ fun MainChatScreen(
                             ) {
                                 Icon(
                                     Icons.Default.Tune,
-                                    contentDescription = "会话参数",
+                                    contentDescription = strings.sessionPromptCd,
                                     tint = if (currentSession.sessionSystemPrompt.isNotBlank()) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
@@ -844,7 +881,7 @@ fun MainChatScreen(
                             OutlinedTextField(
                                 value = inputText,
                                 onValueChange = { inputText = it },
-                                placeholder = { Text("输入消息或 JSON 请求内容...") },
+                                placeholder = { Text(strings.inputPlaceholder) },
                                 maxLines = 5,
                                 shape = RoundedCornerShape(22.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -866,7 +903,7 @@ fun MainChatScreen(
                                         .size(46.dp)
                                         .background(MaterialTheme.colorScheme.error, CircleShape),
                                 ) {
-                                    Icon(Icons.Default.Stop, contentDescription = "停止", tint = Color.White)
+                                    Icon(Icons.Default.Stop, contentDescription = strings.stopCd, tint = Color.White)
                                 }
                             } else {
                                 IconButton(
@@ -875,7 +912,7 @@ fun MainChatScreen(
                                         .size(46.dp)
                                         .background(Brand.Gradient, CircleShape),
                                 ) {
-                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送", tint = Color.White)
+                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = strings.sendCd, tint = Color.White)
                                 }
                             }
                         }
@@ -889,7 +926,7 @@ fun MainChatScreen(
     inspectingMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { inspectingMessage = null },
-            title = { Text("HTTP 请求 / 响应报文详情") },
+            title = { Text(strings.packetDialogTitle) },
             text = {
                 Column(
                     modifier = Modifier
@@ -897,19 +934,19 @@ fun MainChatScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("请求报文:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    Text(strings.requestPacketHeader, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                     SelectionContainer {
                         Text(
-                            text = msg.rawRequestPreview.ifBlank { "(无)" },
+                            text = msg.rawRequestPreview.ifBlank { "-" },
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                         )
                     }
                     HorizontalDivider()
-                    Text("响应报文:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    Text(strings.responsePacketHeader, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                     SelectionContainer {
                         Text(
-                            text = msg.rawResponsePreview.ifBlank { "(无)" },
+                            text = msg.rawResponsePreview.ifBlank { "-" },
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                         )
@@ -920,12 +957,12 @@ fun MainChatScreen(
                 TextButton(onClick = {
                     copyText("【Request】\n${msg.rawRequestPreview}\n\n【Response】\n${msg.rawResponsePreview}")
                 }) {
-                    Text("复制全部报文")
+                    Text(strings.copyAllPacketsBtn)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { inspectingMessage = null }) {
-                    Text("关闭")
+                    Text(strings.closeBtn)
                 }
             },
         )
@@ -936,12 +973,12 @@ fun MainChatScreen(
         var tempPrompt by remember(currentSession.id) { mutableStateOf(currentSession.sessionSystemPrompt) }
         AlertDialog(
             onDismissRequest = { showSessionPromptDialog = false },
-            title = { Text("当前会话 System Prompt") },
+            title = { Text(strings.sessionPromptDialogTitle) },
             text = {
                 OutlinedTextField(
                     value = tempPrompt,
                     onValueChange = { tempPrompt = it },
-                    label = { Text("留空则沿用接口配置默认提示词") },
+                    label = { Text(strings.sessionPromptDialogLabel) },
                     minLines = 3,
                     maxLines = 8,
                     modifier = Modifier.fillMaxWidth(),
@@ -952,12 +989,12 @@ fun MainChatScreen(
                     updateCurrentSession { it.copy(sessionSystemPrompt = tempPrompt) }
                     showSessionPromptDialog = false
                 }) {
-                    Text("确定")
+                    Text(strings.okBtn)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSessionPromptDialog = false }) {
-                    Text("取消")
+                    Text(strings.cancelBtn)
                 }
             },
         )
@@ -967,16 +1004,16 @@ fun MainChatScreen(
     if (showAboutDialog) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            title = { Text("关于 Universal API Studio (开源版)") },
+            title = { Text(strings.aboutDialogTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("版本: v1.1.0 (Open Source Edition)", style = MaterialTheme.typography.bodySmall)
-                    Text("包名: com.universalapi.studio.oss", style = MaterialTheme.typography.bodySmall)
-                    Text("开源协议: GNU GPLv3", style = MaterialTheme.typography.bodySmall, color = Brand.AccentSoft)
-                    Text("软件作者: @Azumaserne", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(strings.aboutVersionLine, style = MaterialTheme.typography.bodySmall)
+                    Text(strings.aboutPackageLine, style = MaterialTheme.typography.bodySmall)
+                    Text(strings.aboutLicenseLine, style = MaterialTheme.typography.bodySmall, color = Brand.AccentSoft)
+                    Text("${strings.authorPrefix}@Azumaserne", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "基于 GNU GPLv3 协议开源，免激活开箱即用。所有 API Key 与对话历史仅保存在本地，零广告零遥测。",
+                        strings.aboutDesc,
                         style = MaterialTheme.typography.bodySmall,
                         color = Brand.Success,
                     )
@@ -984,14 +1021,67 @@ fun MainChatScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showAboutDialog = false }) {
-                    Text("确定")
+                    Text(strings.okBtn)
                 }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    copyText("https://github.com/kaka714/Universal-API-Studio", "已复制 GitHub 仓库地址")
+                    copyText("https://github.com/kaka714/Universal-API-Studio", strings.copiedRepoMsg)
                 }) {
-                    Text("复制仓库地址")
+                    Text(strings.copyRepoBtn)
+                }
+            },
+        )
+    }
+
+    if (showLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text(strings.chooseLanguageTitle) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    AppLanguage.entries.forEach { lang ->
+                        val selected = lang == currentLang
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (selected) Brand.Accent.copy(alpha = 0.16f) else Color.Transparent,
+                                )
+                                .clickable {
+                                    onChangeLanguage(lang)
+                                    showLanguageDialog = false
+                                }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = lang.nativeName,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selected) Brand.AccentSoft else Brand.TextPrimary,
+                            )
+                            if (selected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Brand.Success,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(strings.closeBtn)
                 }
             },
         )
@@ -1020,6 +1110,7 @@ private fun EmptyStateCard(
     onOpenConfig: () -> Unit,
     onSendTest: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     var apiKeyDraft by remember(profile.id) { mutableStateOf("") }
     val needsKey = profile.apiKey.isBlank() && !profile.baseUrl.contains("httpbin.org", ignoreCase = true)
@@ -1034,12 +1125,19 @@ private fun EmptyStateCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "通用 API 已就绪",
+                text = strings.emptyReadyTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "当前渠道：${profile.name}\n请求地址：${UniversalApiClient.resolveEndpointUrl(profile)}\n模型：${UniversalApiClient.resolveEffectiveModelId(profile)} · 自定义请求头：${profile.customHeaders.count { it.enabled }} 个",
+                text = String.format(
+                    Locale.US,
+                    strings.emptyChannelInfoFmt,
+                    profile.name,
+                    UniversalApiClient.resolveEndpointUrl(profile),
+                    UniversalApiClient.resolveEffectiveModelId(profile),
+                    profile.customHeaders.count { it.enabled },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1053,14 +1151,14 @@ private fun EmptyStateCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = "粘贴 API Key 即可直接开聊",
+                        text = strings.pasteKeyTitle,
                         style = MaterialTheme.typography.labelMedium,
                         color = Brand.Warning,
                         fontWeight = FontWeight.Bold,
                     )
                     if (ModelCatalog.isOpenRouter(profile)) {
                         Text(
-                            text = "输入 OpenRouter Key (sk-or-...) 后会自动同步到 ChatGPT、Claude 与 DeepSeek 预设，无需重复填写。",
+                            text = strings.openRouterKeyHint,
                             style = MaterialTheme.typography.labelSmall,
                             color = Brand.TextSecondary,
                         )
@@ -1080,7 +1178,7 @@ private fun EmptyStateCard(
                         Button(
                             onClick = { onSaveApiKey(apiKeyDraft) },
                         ) {
-                            Text("保存")
+                            Text(strings.saveBtn)
                         }
                     }
                     OutlinedButton(
@@ -1088,7 +1186,7 @@ private fun EmptyStateCard(
                             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty().trim()
                             if (clip.isEmpty()) {
-                                Toast.makeText(context, "剪贴板为空，请先复制 API Key", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.clipboardEmptyKeyMsg, Toast.LENGTH_SHORT).show()
                             } else {
                                 apiKeyDraft = clip
                                 onSaveApiKey(clip)
@@ -1098,7 +1196,7 @@ private fun EmptyStateCard(
                     ) {
                         Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("从剪贴板一键粘贴并启用")
+                        Text(strings.pasteEnableKeyBtn)
                     }
                 }
             }
@@ -1111,10 +1209,10 @@ private fun EmptyStateCard(
                 OutlinedButton(onClick = onOpenConfig, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("配置 API/参数")
+                    Text(strings.configureApiBtn)
                 }
                 GradientButton(onClick = onSendTest, modifier = Modifier.weight(1f)) {
-                    Text("测试连通性")
+                    Text(strings.testConnectivityBtn)
                 }
             }
         }
@@ -1158,6 +1256,7 @@ private fun MessageBubble(
     onInspect: () -> Unit,
     onRetry: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val isUser = message.role == "user"
     var showReasoning by remember { mutableStateOf(false) }
 
@@ -1210,7 +1309,11 @@ private fun MessageBubble(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
-                                text = "思考过程 (点击${if (showReasoning) "收起" else "展开"})",
+                                text = String.format(
+                                    Locale.US,
+                                    strings.reasoningFoldFmt,
+                                    if (showReasoning) strings.collapseWord else strings.expandWord,
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Brand.AccentSoft,
                             )
@@ -1249,7 +1352,16 @@ private fun MessageBubble(
                         } else 0
                         val estPrefix = if (message.usageIsEstimated) "≈" else ""
                         Text(
-                            text = "上下文: $estPrefix${message.totalTokens} tok (入${message.promptTokens}/出${message.completionTokens}) · Cache命中: ${message.cacheHitTokens} ($hitPct%)",
+                            text = String.format(
+                                Locale.US,
+                                strings.bubbleUsageFmt,
+                                estPrefix,
+                                message.totalTokens,
+                                message.promptTokens,
+                                message.completionTokens,
+                                message.cacheHitTokens,
+                                hitPct,
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.5.sp,
                             color = if (message.cacheHitTokens > 0) Brand.Cyan else Brand.TextTertiary,
@@ -1261,7 +1373,7 @@ private fun MessageBubble(
                     ) {
                         AssistChip(
                             onClick = onCopy,
-                            label = { Text("复制", fontSize = 11.sp) },
+                            label = { Text(strings.copyBtn, fontSize = 11.sp) },
                             leadingIcon = {
                                 Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                             },
@@ -1269,7 +1381,7 @@ private fun MessageBubble(
                         if (message.rawRequestPreview.isNotBlank() || message.rawResponsePreview.isNotBlank()) {
                             AssistChip(
                                 onClick = onInspect,
-                                label = { Text("报文", fontSize = 11.sp) },
+                                label = { Text(strings.packetBtn, fontSize = 11.sp) },
                                 leadingIcon = {
                                     Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(14.dp))
                                 },
@@ -1277,7 +1389,7 @@ private fun MessageBubble(
                         }
                         AssistChip(
                             onClick = onRetry,
-                            label = { Text("重试", fontSize = 11.sp) },
+                            label = { Text(strings.retryBtn, fontSize = 11.sp) },
                             leadingIcon = {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                             },
@@ -1312,20 +1424,21 @@ private fun ContextCacheStatusPill(
     summary: SessionUsageSummary,
     onClick: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val usageColor = when {
         summary.contextRatio >= 0.8f -> Brand.Danger
         summary.contextRatio >= 0.5f -> Brand.Warning
         else -> Brand.Success
     }
     val pctInt = (summary.contextRatio * 100f).toInt().coerceIn(0, 100)
-    val ctxLabel = "上下文 ${TokenEstimator.formatCompact(summary.currentContextTokens)}/${TokenEstimator.formatCompact(summary.contextWindow)} ($pctInt%)"
+    val ctxLabel = "${strings.contextWord} ${TokenEstimator.formatCompact(summary.currentContextTokens)}/${TokenEstimator.formatCompact(summary.contextWindow)} ($pctInt%)"
 
     val (cacheLabel, cacheColor) = when {
-        !summary.hasAssistantStats -> "Cache 待请求" to Brand.TextTertiary
+        !summary.hasAssistantStats -> strings.cacheWaiting to Brand.TextTertiary
         summary.lastCacheHitTokens > 0 ->
             "Cache ${summary.lastCacheHitRatePct.toInt()}% (${TokenEstimator.formatCompact(summary.lastCacheHitTokens)})" to Brand.Cyan
-        summary.lastIsEstimated -> "Cache 估算中" to Brand.TextSecondary
-        else -> "Cache 0% (未命中)" to Brand.TextSecondary
+        summary.lastIsEstimated -> strings.cacheEstimated to Brand.TextSecondary
+        else -> strings.cacheMissed to Brand.TextSecondary
     }
 
     Box(
@@ -1391,6 +1504,7 @@ private fun UsageDetailsDialog(
     onSelectContextWindow: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val usageColor = when {
         summary.contextRatio >= 0.8f -> Brand.Danger
         summary.contextRatio >= 0.5f -> Brand.Warning
@@ -1400,7 +1514,7 @@ private fun UsageDetailsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("上下文占用 & Cache Hit 详情") },
+        title = { Text(strings.usageDialogTitle) },
         text = {
             Column(
                 modifier = Modifier
@@ -1409,7 +1523,7 @@ private fun UsageDetailsDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "当前上下文窗口占用 (${profile.name})",
+                    text = String.format(Locale.US, strings.usageWindowLabelFmt, profile.name),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -1430,7 +1544,7 @@ private fun UsageDetailsDialog(
                 )
 
                 Text(
-                    text = "快捷设置当前渠道最大上下文窗口：",
+                    text = strings.usageQuickWindowHint,
                     style = MaterialTheme.typography.labelSmall,
                     color = Brand.TextSecondary,
                 )
@@ -1457,36 +1571,45 @@ private fun UsageDetailsDialog(
                 HorizontalDivider()
 
                 Text(
-                    text = "最近一轮请求明细",
+                    text = strings.usageLastRoundTitle,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 if (!summary.hasAssistantStats) {
                     Text(
-                        text = "当前会话尚未收到模型响应，发送消息后将展示真实 Token 与 Cache Hit 数据。",
+                        text = strings.usageNoResponseMsg,
                         style = MaterialTheme.typography.bodySmall,
                         color = Brand.TextSecondary,
                     )
                 } else {
                     val hitRateStr = String.format(Locale.US, "%.1f", summary.lastCacheHitRatePct)
                     Text(
-                        text = "输入 (Prompt): ${summary.lastPromptTokens} tokens\n" +
-                            "输出 (Completion): ${summary.lastCompletionTokens} tokens\n" +
-                            "本轮总计 (Total): ${summary.lastTotalTokens} tokens",
+                        text = String.format(
+                            Locale.US,
+                            strings.usageRoundDetailFmt,
+                            summary.lastPromptTokens,
+                            summary.lastCompletionTokens,
+                            summary.lastTotalTokens,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        text = "Cache Hit 命中: ${summary.lastCacheHitTokens} tokens ($hitRateStr%)\n" +
-                            "Cache Miss 未命中: ${summary.lastCacheMissTokens} tokens",
+                        text = String.format(
+                            Locale.US,
+                            strings.usageCacheDetailFmt,
+                            summary.lastCacheHitTokens,
+                            hitRateStr,
+                            summary.lastCacheMissTokens,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (summary.lastCacheHitTokens > 0) Brand.Cyan else Brand.TextSecondary,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = if (summary.lastIsEstimated) {
-                            "数据来源：本地字符估算（当前接口未返回 usage 字段）"
+                            strings.usageSourceEstimated
                         } else {
-                            "数据来源：接口真实返回 usage"
+                            strings.usageSourceReal
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = if (summary.lastIsEstimated) Brand.Warning else Brand.Success,
@@ -1496,15 +1619,20 @@ private fun UsageDetailsDialog(
                 HorizontalDivider()
 
                 Text(
-                    text = "本会话累计统计",
+                    text = strings.usageSessionTitle,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 val sumRateStr = String.format(Locale.US, "%.1f", summary.sessionCacheHitRatePct)
                 Text(
-                    text = "累计输入: ${summary.sessionTotalPrompt} tokens\n" +
-                        "累计输出: ${summary.sessionTotalCompletion} tokens\n" +
-                        "累计 Cache Hit: ${summary.sessionTotalCacheHit} tokens ($sumRateStr%)",
+                    text = String.format(
+                        Locale.US,
+                        strings.usageSessionSummaryFmt,
+                        summary.sessionTotalPrompt,
+                        summary.sessionTotalCompletion,
+                        summary.sessionTotalCacheHit,
+                        sumRateStr,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Brand.TextSecondary,
                 )
@@ -1512,7 +1640,7 @@ private fun UsageDetailsDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("关闭")
+                Text(strings.closeBtn)
             }
         },
     )

@@ -67,8 +67,12 @@ import androidx.compose.ui.unit.dp
 import com.universalapi.studio.data.ApiProfile
 import com.universalapi.studio.data.HeaderPair
 import com.universalapi.studio.data.ModelCatalog
+import com.universalapi.studio.i18n.AppLanguage
+import com.universalapi.studio.i18n.LocalAppLanguage
+import com.universalapi.studio.i18n.LocalAppStrings
 import com.universalapi.studio.network.UniversalApiClient
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,11 +80,14 @@ import java.util.UUID
 fun ApiConfigScreen(
     profiles: List<ApiProfile>,
     activeProfileId: String,
+    onChangeLanguage: (AppLanguage) -> Unit,
     onSaveAll: (updatedProfiles: List<ApiProfile>, newActiveId: String) -> Unit,
     onExportJson: (List<ApiProfile>) -> String,
     onImportJson: (String) -> Result<List<ApiProfile>>,
     onClose: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
+    val currentLang = LocalAppLanguage.current
     val scope = rememberCoroutineScope()
     var localProfiles by remember(profiles) { mutableStateOf(profiles) }
     var editingId by remember(activeProfileId) { mutableStateOf(activeProfileId) }
@@ -105,10 +112,10 @@ fun ApiConfigScreen(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Brand.Bg),
-                title = { Text("通用 API 渠道与高级参数") },
+                title = { Text(strings.configScreenTitle) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "关闭")
+                        Icon(Icons.Default.Close, contentDescription = strings.closeBtn)
                     }
                 },
                 actions = {
@@ -116,13 +123,13 @@ fun ApiConfigScreen(
                         jsonTransferText = onExportJson(localProfiles)
                         showImportExportDialog = true
                     }) {
-                        Icon(Icons.Default.Download, contentDescription = "导入导出")
+                        Icon(Icons.Default.Download, contentDescription = strings.importExportTitle)
                     }
                     TextButton(onClick = {
                         onSaveAll(localProfiles, current.id)
                         onClose()
                     }) {
-                        Text("保存", fontWeight = FontWeight.Bold)
+                        Text(strings.saveBtn, fontWeight = FontWeight.Bold)
                     }
                 },
             )
@@ -136,37 +143,49 @@ fun ApiConfigScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // 配置方案切换栏
+            Text(strings.uiLanguageSection, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(AppLanguage.entries, key = { it.code }) { lang ->
+                    FilterChip(
+                        selected = lang == currentLang,
+                        onClick = { onChangeLanguage(lang) },
+                        label = { Text(lang.nativeName) },
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("接口配置方案", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(strings.profileSchemesSection, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = {
                         val newProf = ApiProfile(
                             id = UUID.randomUUID().toString(),
-                            name = "新接口 ${localProfiles.size + 1}",
+                            name = "API ${localProfiles.size + 1}",
                         )
                         localProfiles = localProfiles + newProf
                         editingId = newProf.id
                     }) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("新增")
+                        Text(strings.addBtn)
                     }
                     TextButton(onClick = {
                         val copy = current.copy(
                             id = UUID.randomUUID().toString(),
-                            name = "${current.name} (副本)",
+                            name = "${current.name} (${strings.duplicateBtn})",
                         )
                         localProfiles = localProfiles + copy
                         editingId = copy.id
                     }) {
                         Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("复制")
+                        Text(strings.duplicateBtn)
                     }
                     if (localProfiles.size > 1) {
                         IconButton(onClick = {
@@ -174,7 +193,7 @@ fun ApiConfigScreen(
                             localProfiles = filtered
                             editingId = filtered.first().id
                         }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除当前配置", tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -185,7 +204,7 @@ fun ApiConfigScreen(
                     FilterChip(
                         selected = prof.id == current.id,
                         onClick = { editingId = prof.id },
-                        label = { Text(prof.name.ifBlank { "未命名" }) },
+                        label = { Text(prof.name.ifBlank { strings.unnamedProfile }) },
                     )
                 }
             }
@@ -200,25 +219,24 @@ fun ApiConfigScreen(
                 }
             }
 
-            // 基础接口设置
-            Text("基础连接配置", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(strings.basicConfigSection, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             OutlinedTextField(
                 value = current.name,
                 onValueChange = { v -> updateCurrent { it.copy(name = v) } },
-                label = { Text("配置名称") },
+                label = { Text(strings.profileNameLabel) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = current.baseUrl,
                 onValueChange = { v -> updateCurrent { it.copy(baseUrl = v) } },
-                label = { Text("API Base URL / 完整请求地址") },
-                placeholder = { Text("如 https://api.openai.com/v1") },
+                label = { Text(strings.baseUrlLabel) },
+                placeholder = { Text("https://api.openai.com/v1") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                text = "实际请求 URL: ${UniversalApiClient.resolveEndpointUrl(current)}",
+                text = "${strings.actualRequestUrlPrefix}${UniversalApiClient.resolveEndpointUrl(current)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -229,9 +247,9 @@ fun ApiConfigScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("严格使用原始 URL（不自动拼接后缀）", style = MaterialTheme.typography.bodyMedium)
+                    Text(strings.exactUrlTitle, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "接入非 OpenAI 通用 POST 接口时请开启",
+                        strings.exactUrlDesc,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -245,14 +263,14 @@ fun ApiConfigScreen(
             OutlinedTextField(
                 value = current.apiKey,
                 onValueChange = { v -> updateCurrent { it.copy(apiKey = v) } },
-                label = { Text("API Key（自动填入 Authorization: Bearer，可留空）") },
+                label = { Text(strings.apiKeyLabel) },
                 singleLine = true,
                 visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { showApiKey = !showApiKey }) {
                         Icon(
                             if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "显示/隐藏",
+                            contentDescription = null,
                         )
                     }
                 },
@@ -268,7 +286,7 @@ fun ApiConfigScreen(
                     OutlinedTextField(
                         value = current.model,
                         onValueChange = { v -> updateCurrent { it.copy(model = v) } },
-                        label = { Text("模型名称 (Model)") },
+                        label = { Text(strings.modelNameLabel) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -297,10 +315,10 @@ fun ApiConfigScreen(
                                 .onSuccess { list ->
                                     fetchedModels = list
                                     showModelMenu = true
-                                    feedbackMsg = "成功获取 ${list.size} 个可用模型，请在下拉框中选择"
+                                    feedbackMsg = String.format(Locale.US, strings.fetchedConfigSuccessFmt, list.size)
                                 }
                                 .onFailure { err ->
-                                    feedbackMsg = "拉取模型失败：${err.message}"
+                                    feedbackMsg = String.format(Locale.US, strings.fetchedConfigFailedFmt, err.message.orEmpty())
                                 }
                             isFetchingModels = false
                         }
@@ -312,7 +330,7 @@ fun ApiConfigScreen(
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
                     Spacer(Modifier.width(4.dp))
-                    Text("拉取")
+                    Text(strings.fetchBtn)
                 }
             }
 
@@ -321,7 +339,7 @@ fun ApiConfigScreen(
             }
             if (familyPresets.isNotEmpty()) {
                 Text(
-                    "同家族快捷切换",
+                    strings.familyQuickSwitchLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -348,10 +366,10 @@ fun ApiConfigScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    Text("流式传输 (SSE Stream)", style = MaterialTheme.typography.bodyMedium)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(strings.streamTitle, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "边生成边打字输出；测试普通 JSON 接口可关闭",
+                        strings.streamDesc,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -364,13 +382,12 @@ fun ApiConfigScreen(
 
             HorizontalDivider()
 
-            // 自定义请求头
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("自定义请求头 (Headers)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(strings.customHeadersSection, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 TextButton(onClick = {
                     updateCurrent {
                         it.copy(customHeaders = it.customHeaders + HeaderPair())
@@ -378,13 +395,13 @@ fun ApiConfigScreen(
                 }) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("添加 Header")
+                    Text(strings.addHeaderBtn)
                 }
             }
 
             if (current.customHeaders.isEmpty()) {
                 Text(
-                    "暂无自定义请求头，可添加 x-api-key、HTTP-Referer、User-Agent 等任意头。",
+                    strings.noHeadersHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -414,7 +431,7 @@ fun ApiConfigScreen(
                                     })
                                 }
                             },
-                            label = { Text("Header Key") },
+                            label = { Text(strings.headerKeyLabel) },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
@@ -427,7 +444,7 @@ fun ApiConfigScreen(
                                     })
                                 }
                             },
-                            label = { Text("Value") },
+                            label = { Text(strings.headerValueLabel) },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
@@ -436,7 +453,7 @@ fun ApiConfigScreen(
                                 prof.copy(customHeaders = prof.customHeaders.filter { it.id != header.id })
                             }
                         }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除 Header")
+                            Icon(Icons.Default.Delete, contentDescription = null)
                         }
                     }
                 }
@@ -444,13 +461,12 @@ fun ApiConfigScreen(
 
             HorizontalDivider()
 
-            // 高级参数与 Body 模板
-            Text("高级模型参数 & Body 模板", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(strings.advancedSection, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
             OutlinedTextField(
                 value = current.systemPrompt,
                 onValueChange = { v -> updateCurrent { it.copy(systemPrompt = v) } },
-                label = { Text("System Prompt (默认系统提示词)") },
+                label = { Text(strings.systemPromptLabel) },
                 minLines = 2,
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
@@ -458,7 +474,7 @@ fun ApiConfigScreen(
 
             Column {
                 Text(
-                    "Temperature: ${String.format(java.util.Locale.US, "%.2f", current.temperature)}",
+                    "Temperature: ${String.format(Locale.US, "%.2f", current.temperature)}",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Slider(
@@ -470,7 +486,7 @@ fun ApiConfigScreen(
 
             Column {
                 Text(
-                    "Top P: ${String.format(java.util.Locale.US, "%.2f", current.topP)}",
+                    "Top P: ${String.format(Locale.US, "%.2f", current.topP)}",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Slider(
@@ -486,7 +502,7 @@ fun ApiConfigScreen(
                     val parsed = v.filter { it.isDigit() }.toIntOrNull()
                     updateCurrent { it.copy(maxTokens = parsed) }
                 },
-                label = { Text("Max Tokens（留空表示不限制）") },
+                label = { Text(strings.maxTokensLabel) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -500,7 +516,7 @@ fun ApiConfigScreen(
                         updateCurrent { it.copy(contextWindow = parsed) }
                     }
                 },
-                label = { Text("最大上下文窗口 (Context Window Tokens)") },
+                label = { Text(strings.contextWindowLabel) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -523,24 +539,24 @@ fun ApiConfigScreen(
                 }
             }
 
-            Text("思考等级 (Reasoning Effort)", style = MaterialTheme.typography.bodySmall)
+            Text(strings.reasoningSectionLabel, style = MaterialTheme.typography.bodySmall)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(ModelCatalog.reasoningEfforts, key = { it.value }) { opt ->
                     FilterChip(
                         selected = current.reasoningEffort == opt.value,
                         onClick = { updateCurrent { it.copy(reasoningEffort = opt.value) } },
-                        label = { Text(opt.label) },
+                        label = { Text(strings.effortLabel(opt.value)) },
                     )
                 }
             }
 
-            Text("速度 / 服务等级 (Speed / Service Tier)", style = MaterialTheme.typography.bodySmall)
+            Text(strings.speedSectionLabel, style = MaterialTheme.typography.bodySmall)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(ModelCatalog.speedModes, key = { it.value }) { opt ->
                     FilterChip(
                         selected = current.speedMode == opt.value,
                         onClick = { updateCurrent { it.copy(speedMode = opt.value) } },
-                        label = { Text(opt.label) },
+                        label = { Text(strings.speedLabel(opt.value)) },
                     )
                 }
             }
@@ -548,8 +564,8 @@ fun ApiConfigScreen(
             OutlinedTextField(
                 value = current.extraBodyJson,
                 onValueChange = { v -> updateCurrent { it.copy(extraBodyJson = v) } },
-                label = { Text("附加顶层 JSON 参数 (Extra Body)") },
-                placeholder = { Text("例如 {\"reasoning_effort\": \"high\"}") },
+                label = { Text(strings.extraBodyLabel) },
+                placeholder = { Text("{\"reasoning_effort\": \"high\"}") },
                 minLines = 2,
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
@@ -560,7 +576,7 @@ fun ApiConfigScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("自定义 Body 模板（留空使用标准 OpenAI 格式）", style = MaterialTheme.typography.bodySmall)
+                Text(strings.customBodyTemplateSection, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                 TextButton(onClick = {
                     updateCurrent {
                         it.copy(
@@ -568,7 +584,7 @@ fun ApiConfigScreen(
                         )
                     }
                 }) {
-                    Text("填入示例模板")
+                    Text(strings.fillSampleBtn)
                 }
             }
 
@@ -576,7 +592,7 @@ fun ApiConfigScreen(
                 value = current.customBodyTemplate,
                 onValueChange = { v -> updateCurrent { it.copy(customBodyTemplate = v) } },
                 label = { Text("Custom Body Template") },
-                placeholder = { Text("支持 {{model}} {{prompt_json}} {{system_prompt_json}} {{messages_json}} {{temperature}} {{stream}}") },
+                placeholder = { Text("{{model}} {{prompt_json}} {{system_prompt_json}} {{messages_json}} {{temperature}} {{stream}}") },
                 minLines = 3,
                 maxLines = 8,
                 modifier = Modifier.fillMaxWidth(),
@@ -585,8 +601,8 @@ fun ApiConfigScreen(
             OutlinedTextField(
                 value = current.customResponsePath,
                 onValueChange = { v -> updateCurrent { it.copy(customResponsePath = v) } },
-                label = { Text("自定义响应 JSON 提取路径（可选）") },
-                placeholder = { Text("如 data.reply 或 choices[0].message.content；留空自动识别") },
+                label = { Text(strings.customResponsePathLabel) },
+                placeholder = { Text("data.reply / choices[0].message.content") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -598,7 +614,7 @@ fun ApiConfigScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("保存并启用此接口配置")
+                Text(strings.saveEnableProfileBtn)
             }
 
             Box(
@@ -621,11 +637,11 @@ fun ApiConfigScreen(
     if (showImportExportDialog) {
         AlertDialog(
             onDismissRequest = { showImportExportDialog = false },
-            title = { Text("导入 / 导出全部 API 配置 (JSON)") },
+            title = { Text(strings.importExportTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "你可以复制下方 JSON 备份配置，或粘贴他人分享的 JSON 后点导入：",
+                        strings.importExportDesc,
                         style = MaterialTheme.typography.bodySmall,
                     )
                     OutlinedTextField(
@@ -644,21 +660,21 @@ fun ApiConfigScreen(
                             localProfiles = imported
                             editingId = imported.first().id
                             showImportExportDialog = false
-                            feedbackMsg = "成功导入 ${imported.size} 个 API 配置，请记得点击右上角保存"
+                            feedbackMsg = String.format(Locale.US, strings.importedToastFmt, imported.size)
                         }
                         .onFailure { err ->
-                            feedbackMsg = "导入失败：${err.message}"
+                            feedbackMsg = String.format(Locale.US, strings.importFailedFmt, err.message.orEmpty())
                             showImportExportDialog = false
                         }
                 }) {
                     Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("导入覆盖")
+                    Text(strings.importOverrideBtn)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportExportDialog = false }) {
-                    Text("关闭")
+                    Text(strings.closeBtn)
                 }
             },
         )

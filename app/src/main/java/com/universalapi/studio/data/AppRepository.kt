@@ -1,6 +1,7 @@
 package com.universalapi.studio.data
 
 import android.content.Context
+import com.universalapi.studio.i18n.AppLanguage
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -14,6 +15,8 @@ class AppRepository(context: Context) {
         private const val KEY_ACTIVE_SESSION_ID = "active_session_id"
         private const val KEY_MIGRATED_OPENROUTER_V11 = "migrated_openrouter_v11"
         private const val KEY_MIGRATED_DEEPSEEK_V4_V11 = "migrated_deepseek_v4_v11"
+        private const val KEY_APP_LANGUAGE = "app_language_code"
+        private const val KEY_WELCOME_DONE = "welcome_completed"
 
         private fun openRouterDefaultHeaders(): List<HeaderPair> = listOf(
             HeaderPair(key = "HTTP-Referer", value = "https://github.com/kaka714/Universal-API-Studio", enabled = true),
@@ -213,6 +216,22 @@ class AppRepository(context: Context) {
 
     fun saveActiveSessionId(id: String) {
         prefs.edit().putString(KEY_ACTIVE_SESSION_ID, id).apply()
+    }
+
+    fun loadLanguage(): AppLanguage {
+        val saved = prefs.getString(KEY_APP_LANGUAGE, null)
+        return AppLanguage.fromCode(saved) ?: AppLanguage.fromSystemLocale()
+    }
+
+    fun saveLanguage(lang: AppLanguage) {
+        prefs.edit().putString(KEY_APP_LANGUAGE, lang.code).apply()
+    }
+
+    fun hasCompletedWelcome(): Boolean =
+        prefs.getBoolean(KEY_WELCOME_DONE, false)
+
+    fun setCompletedWelcome(done: Boolean) {
+        prefs.edit().putBoolean(KEY_WELCOME_DONE, done).apply()
     }
 
     fun exportProfilesJson(profiles: List<ApiProfile>): String {
