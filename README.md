@@ -9,7 +9,7 @@
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-*Designed & Authored by **[@Azumaserne](https://github.com/kaka714/Universal-API-Studio)***
+*Designed & Authored by **[@Azumaserne](https://github.com/Azumaserne/Universal-API-Studio)***
 
 **English** | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
 
@@ -34,7 +34,7 @@
 
 ## 📥 Download
 
-Pre-built signed APKs are available on the **[GitHub Releases](https://github.com/kaka714/Universal-API-Studio/releases)** page.
+Pre-built signed APKs are available on the **[GitHub Releases](https://github.com/Azumaserne/Universal-API-Studio/releases)** page.
 
 ---
 
@@ -110,4 +110,4 @@ This project is licensed under the **[GNU General Public License v3.0 (GPLv3)](L
 - ✅ **Permitted**: Anyone may freely run, study, modify, and distribute this software and its source code.
 - 📜 **Share-Alike & Attribution**: Any modified version, derivative work, or redistributed binary **must retain the original author attribution (`@Azumaserne`) and release its complete corresponding source code under GPLv3** (closed-source redistribution or proprietary resale is prohibited).
 
-Copyright © 2026 **[@Azumaserne](https://github.com/kaka714/Universal-API-Studio)**
+Copyright © 2026 **[@Azumaserne](https://github.com/Azumaserne/Universal-API-Studio)**

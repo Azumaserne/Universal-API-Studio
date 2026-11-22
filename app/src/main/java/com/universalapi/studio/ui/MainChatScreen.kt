@@ -1026,7 +1026,7 @@ fun MainChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    copyText("https://github.com/kaka714/Universal-API-Studio", strings.copiedRepoMsg)
+                    copyText("https://github.com/Azumaserne/Universal-API-Studio", strings.copiedRepoMsg)
                 }) {
                     Text(strings.copyRepoBtn)
                 }

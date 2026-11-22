@@ -19,7 +19,7 @@ class AppRepository(context: Context) {
         private const val KEY_WELCOME_DONE = "welcome_completed"
 
         private fun openRouterDefaultHeaders(): List<HeaderPair> = listOf(
-            HeaderPair(key = "HTTP-Referer", value = "https://github.com/kaka714/Universal-API-Studio", enabled = true),
+            HeaderPair(key = "HTTP-Referer", value = "https://github.com/Azumaserne/Universal-API-Studio", enabled = true),
             HeaderPair(key = "X-Title", value = "Universal API Studio", enabled = true),
         )
 
